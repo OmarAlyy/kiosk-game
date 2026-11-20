@@ -1,493 +1,460 @@
-/* Kiosk vertical slice: two days at the juice kiosk on «شارع الفكرة», with the parasol in between.
-   Spec: docs/specs/2026-11-20_kiosk-slice-gdd.md. Economy: engine.js (Kiosk). Phaser 3.90, no other libraries.
-   ?demo=1 plays itself (for the gameplay video). */
+/* Prototype A: one authored day at the kiosk, built to test the FUN (placeholder customers).
+   Spec: docs/specs/2026-11-20_prototype-a-design.md · economy: engine.js (KioskA) · art: art.js (ART)
+   ?demo=1 plays itself at natural speed (for the gameplay video). */
 "use strict";
 const W = 720, H = 1280;
-const Q = new URLSearchParams(location.search);
-const DEMO = Q.get("demo") === "1";
-const INK = 0x3b2016, CREAM = 0xfff6e4, SUN = 0xf4b63c, SUN_D = 0xc98a1e, TEAL = 0x3fa9a0, TEAL_D = 0x2c7b74, RED = 0xc8553d, GREEN = 0x4f9a43;
+const DEMO = new URLSearchParams(location.search).get("demo") === "1";
+const INK = 0x3b2016, CREAM = 0xfff6e4, SUN = 0xf4b63c, SUN_D = 0xc98a1e, GREY = 0xb9ac94, ICE = 0x5bb6e6, ICE_D = 0x3b8fc0;
 const FONT = '-apple-system, "Geeza Pro", "Noto Kufi Arabic", "Segoe UI", Tahoma, sans-serif';
 const ar = x => String(x).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
 const sgn = x => (x < 0 ? "−" : "") + ar(Math.abs(x));
-const cupsW = k => ar(k) + " " + (k >= 3 && k <= 10 ? "كوبايات" : "كوباية");
-const txt = (scene, x, y, s, size, color = "#3b2016", extra = {}) =>
-  scene.add.text(x, y, s, { fontFamily: FONT, fontSize: size + "px", color, fontStyle: "bold", rtl: true, align: "center", ...extra }).setOrigin(0.5);
+const T = (s, x, y, str, size, color = "#3b2016", extra = {}) =>
+  s.add.text(x, y, str, { fontFamily: FONT, fontSize: size + "px", color, fontStyle: "bold", rtl: true, align: "center", ...extra }).setOrigin(0.5);
+const COUNTER = { x0: 105, x1: 372, top: 792 };
+const SPOT = { x: 330, y: 1185 };          // where the customer stands, feet
+const NAMES = { farida: "فريدة", omar: "عمر", sitto: "ستو صديقة", suad: "طنط سعاد", yahya: "يحيى", shawky: "عم شوقي", family: "العيلة", captain: "الكابتن" };
 
-// layout of the street (background is 720×1290)
-const COUNTER = { x0: 105, x1: 372, top: 792 };       // the counter top in bg.jpg
-const QUEUE_Y = 1130, QUEUE_X = [300, 430, 560, 690]; // customers' feet, front of the queue first
-const SERVE_ZONE = 150;
-
-class KioskScene extends Phaser.Scene {
-  constructor() { super("kiosk"); }
+class Day extends Phaser.Scene {
+  constructor() { super("day"); }
 
   preload() {
     const A = "assets/";
     this.load.image("bg", A + "bg.jpg");
     ["farida", "omar", "kunafa", "farida_face", "omar_face", "sitto_face"].forEach(k => this.load.image(k, A + k + ".png"));
-    for (let i = 0; i < 6; i++) this.load.svg("cust" + i, A + `cust${i}.svg`, { width: 110, height: 200 });
+    this.load.image("yahya", "assets/yahya.png");
     this.load.svg("cup", A + "cup.svg", { width: 60, height: 80 });
     this.load.svg("coin", A + "coin.svg", { width: 60, height: 60 });
-    this.load.svg("umbrella", A + "umbrella.svg", { width: 300, height: 240 });
     this.load.svg("sun", A + "sun.svg", { width: 160, height: 160 });
+    for (const p of ART.PEOPLE) for (const e of ART.EXPR) this.load.svg(`${p}_${e}`, ART.url(ART.people[p](e)));
+    for (const [k, s] of Object.entries(ART.props)) this.load.svg(k, ART.url(s));
     ["coin", "boing", "crash", "sparkle", "street"].forEach(k => this.load.audio(k, A + k + ".mp3"));
   }
 
   create() {
-    this.state = { money: Kiosk.RULES.startMoney, dayNo: 0, umbrella: false, history: [] };
     this.add.image(W / 2, H / 2, "bg").setDisplaySize(W, 1290);
-    this.heatTint = this.add.rectangle(W / 2, H / 2, W, H, 0xff8a2a, 0).setDepth(1);
-    this.umbrellaSpr = this.add.image(238, 610, "umbrella").setScale(1.0).setVisible(false).setDepth(2);
-    this.sun = this.add.image(600, -120, "sun").setDepth(2);
-    // the team: Farida and Omar beside the kiosk
-    this.omar = this.add.image(470, 1000, "omar").setOrigin(0.5, 1).setScale(0.42).setDepth(3);
-    this.farida = this.add.image(610, 990, "farida").setOrigin(0.5, 1).setScale(0.42).setDepth(3);
-    [this.omar, this.farida].forEach((c, i) => this.tweens.add({ targets: c, scaleY: c.scaleY * 1.012, duration: 1500 + i * 300, yoyo: true, repeat: -1, ease: "Sine.inOut" }));
+    this.heat = this.add.rectangle(W / 2, H / 2, W, H, 0xff8a2a, 0.08).setDepth(1);
+    this.sunImg = this.add.image(610, 250, "sun").setDepth(1).setScale(0.8);
+    this.tweens.add({ targets: this.sunImg, angle: { from: -8, to: 8 }, scale: 0.86, duration: 1800, yoyo: true, repeat: -1, ease: "Sine.inOut" });
+    this.add.text(238, 612, ar(KioskA.R.price), { fontFamily: FONT, fontSize: "52px", color: "#3b2016", fontStyle: "bold" }).setOrigin(0.5).setDepth(2);
+    this.coinOnSign = this.add.image(290, 612, "coin").setScale(0.6).setDepth(2);
+    this.iceBox = this.add.image(70, 905, "iceBox").setScale(0.55).setDepth(3).setVisible(false);
+    this.omar = this.add.image(560, 975, "omar").setOrigin(0.5, 1).setScale(0.38).setDepth(3);
+    this.farida = this.add.image(668, 965, "farida").setOrigin(0.5, 1).setScale(0.38).setDepth(3);
+    [this.omar, this.farida].forEach((c, i) => this.tweens.add({ targets: c, scaleY: c.scaleY * 1.015, duration: 1400 + i * 300, yoyo: true, repeat: -1, ease: "Sine.inOut" }));
     this.cupLayer = this.add.layer().setDepth(4);
     this.custLayer = this.add.layer().setDepth(5);
-    this.fxLayer = this.add.layer().setDepth(8);
-    this.uiLayer = this.add.layer().setDepth(10);
+    this.fx = this.add.layer().setDepth(9);
+    this.ui = this.add.layer().setDepth(12);
     this.hud = this.makeHud();
-    this.bubble = null;
     this.sound.pauseOnBlur = false;
-    this.street = this.sound.add("street", { loop: true, volume: 0.25 });
-    this.input.on("dragstart", (p, cup) => { cup.setScale(cup.baseScale * 1.25).setDepth(9); this.fxLayer.add(cup); });
-    this.input.on("drag", (p, cup, x, y) => cup.setPosition(x, y));
-    this.input.on("dragend", (p, cup) => this.dropCup(cup));
-    this.time.delayedCall(300, () => this.intro());
-    window.__kiosk = this; // for the video recorder and FPS checks
+    this.street = this.sound.add("street", { loop: true, volume: 0.22 });
+    this.input.on("dragstart", (p, o) => { o.setScale(o.baseScale * 1.25); this.fx.add(o); });
+    this.input.on("drag", (p, o, x, y) => o.setPosition(x, y));
+    this.input.on("dragend", (p, o) => o.onDrop && o.onDrop(o));
+    window.__a = this;
+    this.run();
   }
 
-  // ---------- small UI kit: speech bubble, chunky buttons, panels ----------
-  say(who, line, ms) {
+  // ---------- helpers ----------
+  wait(ms) { return new Promise(r => this.time.delayedCall(ms, r)); }
+  play(k, cfg) { try { this.sound.play(k, cfg); } catch (e) {} }
+
+  say(who, line, opts = {}) {
     if (this.bubble) this.bubble.destroy();
-    const c = this.add.container(W / 2, 150).setDepth(12);
-    const g = this.add.graphics();
-    g.fillStyle(INK, 0.35).fillRoundedRect(-330, -78 + 8, 660, 156, 30);
-    g.fillStyle(CREAM, 1).fillRoundedRect(-330, -78, 660, 156, 30).lineStyle(5, INK).strokeRoundedRect(-330, -78, 660, 156, 30);
-    const face = this.add.image(250, 0, who + "_face").setDisplaySize(118, 118);
-    const ring = this.add.graphics().lineStyle(5, INK).strokeCircle(250, 0, 60);
+    const c = this.add.container(W / 2, 150).setDepth(13);
+    const g = this.add.graphics().fillStyle(INK, 0.35).fillRoundedRect(-330, -70, 660, 160, 30)
+      .fillStyle(CREAM).fillRoundedRect(-330, -78, 660, 156, 30).lineStyle(5, INK).strokeRoundedRect(-330, -78, 660, 156, 30);
+    const faceKey = this.textures.exists(who + "_face") ? who + "_face" : (who === "yahya" ? "yahya" : `${who}_${opts.expr || "neutral"}`);
+    const face = this.add.image(250, 0, faceKey);
+    const fs = 118 / Math.max(face.width, face.height * (faceKey.endsWith("_face") ? 1 : 0.45));
+    face.setScale(fs).setOrigin(0.5, faceKey.endsWith("_face") ? 0.5 : (who === "yahya" ? 0.22 : 0.26));
     const mask = this.make.graphics({}, false).fillCircle(W / 2 + 250, 150, 57);
     face.setMask(mask.createGeometryMask());
-    const name = { farida: "فريدة", omar: "عمر", sitto: "ستو صديقة" }[who];
-    const t1 = txt(this, 0, -44, name, 26, "#c8553d").setOrigin(1, 0.5).setX(170);
-    const t2 = txt(this, -60, 18, line, 34, "#3b2016", { wordWrap: { width: 440, useAdvancedWrap: true } }).setOrigin(0.5);
+    const ring = this.add.graphics().lineStyle(5, INK).strokeCircle(250, 0, 60);
+    const t1 = T(this, 170, -44, NAMES[who] || "", 26, "#c8553d").setOrigin(1, 0.5);
+    const t2 = T(this, -60, 18, line, 34, "#3b2016", { wordWrap: { width: 440, useAdvancedWrap: true } });
     c.add([g, face, ring, t1, t2]);
-    c.setScale(0.9).setAlpha(0);
-    this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 180, ease: "Back.out" });
-    const body = who === "farida" ? this.farida : who === "omar" ? this.omar : null;
-    if (body) this.tweens.add({ targets: body, y: body.y - 10, duration: 140, yoyo: true, repeat: 3 });
+    c.setScale(0.92).setAlpha(0);
+    this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 170, ease: "Back.out" });
+    const body = who === "farida" ? this.farida : who === "omar" ? this.omar : (this.cust && this.cust.who === who ? this.cust.img : null);
+    if (body) this.tweens.add({ targets: body, y: body.y - 10, duration: 130, yoyo: true, repeat: 3 });
     this.bubble = c;
-    if (ms) this.time.delayedCall(ms, () => { if (this.bubble === c) { c.destroy(); this.bubble = null; } });
-    return c;
+    return this.wait(opts.ms || Math.max(1800, line.length * 75));
   }
-  hideSay() { if (this.bubble) { this.bubble.destroy(); this.bubble = null; } }
+  hush() { if (this.bubble) { this.bubble.destroy(); this.bubble = null; } }
 
-  button(x, y, w, h, label, onClick, color = SUN, dark = SUN_D, size = 38, textColor = "#3b2016") {
+  button(x, y, w, h, label, cb, color = SUN, dark = SUN_D, size = 36, sub) {
     const c = this.add.container(x, y);
-    const base = this.add.graphics().fillStyle(dark).fillRoundedRect(-w / 2, -h / 2 + 7, w, h, 22);
-    const face = this.add.graphics();
-    const draw = () => face.clear().fillStyle(color).fillRoundedRect(-w / 2, -h / 2, w, h, 22).lineStyle(4, INK).strokeRoundedRect(-w / 2, -h / 2, w, h, 22);
-    draw();
-    const t = txt(this, 0, 0, label, size, textColor);
+    const base = this.add.graphics().fillStyle(dark).fillRoundedRect(-w / 2, -h / 2 + 8, w, h, 24);
+    const face = this.add.graphics().fillStyle(color).fillRoundedRect(-w / 2, -h / 2, w, h, 24).lineStyle(4, INK).strokeRoundedRect(-w / 2, -h / 2, w, h, 24);
+    const t = T(this, 0, sub ? -14 : 0, label, size);
     const top = this.add.container(0, 0, [face, t]);
-    c.add([base, top]);
-    c.setSize(w, h + 7).setInteractive({ useHandCursor: true });
-    c.on("pointerdown", () => { top.y = 6; });
+    if (sub) top.add(T(this, 0, 26, sub, 22, "#6b4a3a"));
+    c.add([base, top]).setSize(w, h + 8).setInteractive({ useHandCursor: true });
+    c.on("pointerdown", () => { top.y = 7; });
     c.on("pointerout", () => { top.y = 0; });
-    c.on("pointerup", () => { top.y = 0; this.sound.play("boing", { volume: 0.25, rate: 1.6 }); onClick(); });
-    c.label = t;
+    c.on("pointerup", () => { top.y = 0; this.play("boing", { volume: 0.22, rate: 1.7 }); cb(); });
+    this.ui.add(c);
     return c;
   }
 
-  panel(h = 470) {
-    const c = this.add.container(0, 0).setDepth(11);
-    const g = this.add.graphics();
-    g.fillStyle(0x2b1a12, 0.88).fillRoundedRect(20, H - h - 30, W - 40, h, 34);
-    c.add(g); c.top = H - h - 30;
-    c.setAlpha(0); this.tweens.add({ targets: c, alpha: 1, duration: 200 });
-    return c;
+  // two (or more) choices; resolves with the index
+  choose(title, opts, demoPick) {
+    return new Promise(res => {
+      const n = opts.length, w = n === 2 ? 300 : 210;
+      const bg = this.add.graphics().fillStyle(0x2b1a12, 0.86).fillRoundedRect(20, H - 300, W - 40, 270, 34);
+      const tt = T(this, W / 2, H - 252, title, 32, "#fff6e4");
+      this.ui.add([bg, tt]);
+      const bs = opts.map((o, i) => this.button(W / 2 + (n === 2 ? (i === 0 ? 160 : -160) : (1 - i) * 230), H - 135, w, 130, o.label, () => done(i), i === 0 ? SUN : CREAM, i === 0 ? SUN_D : GREY, 34, o.sub));
+      const done = i => { bg.destroy(); tt.destroy(); bs.forEach(b => b.destroy()); res(i); };
+      if (DEMO) this.time.delayedCall(2300, () => { const b = bs[demoPick]; b.list[1].y = 7; this.time.delayedCall(180, () => { this.play("boing", { volume: 0.22, rate: 1.7 }); done(demoPick); }); });
+    });
+  }
+
+  next(label = "◀") {
+    return new Promise(res => {
+      if (DEMO) { this.time.delayedCall(1700, res); return; }
+      const b = this.button(W / 2, H - 120, 300, 100, label, () => { b.destroy(); res(); });
+    });
   }
 
   makeHud() {
-    const c = this.add.container(0, 0).setDepth(9).setVisible(false);
-    const pill = (x, w) => this.add.graphics().fillStyle(CREAM).fillRoundedRect(x - w / 2, 34, w, 64, 32).lineStyle(4, INK).strokeRoundedRect(x - w / 2, 34, w, 64, 32);
-    const coin = this.add.image(140, 66, "coin").setScale(0.75);
-    const cup = this.add.image(560, 66, "cup").setScale(0.55);
-    const money = txt(this, 225, 66, "", 36);
-    const cups = txt(this, 630, 66, "", 36);
-    const dayBg = this.add.graphics().fillStyle(0x2b1a12, 0.75).fillRoundedRect(W / 2 - 150, 112, 300, 48, 24);
-    const day = txt(this, W / 2, 136, "", 28, "#fff6e4");
-    c.add([pill(200, 210), pill(600, 180), coin, cup, money, cups, dayBg, day]);
-    c.set = (m, k, d) => { money.setText(ar(m)); cups.setText(ar(k)); day.setText(d); };
-    c.coinPos = { x: 140, y: 66 };
+    const c = this.add.container(0, 0).setDepth(11);
+    const pill = (x, w) => this.add.graphics().fillStyle(CREAM).fillRoundedRect(x - w / 2, 32, w, 64, 32).lineStyle(4, INK).strokeRoundedRect(x - w / 2, 32, w, 64, 32);
+    const coin = this.add.image(128, 64, "coin").setScale(0.72), cup = this.add.image(568, 64, "cup").setScale(0.52);
+    const money = T(this, 212, 64, "", 36), cups = T(this, 632, 64, "", 36);
+    c.add([pill(190, 220), pill(605, 170), coin, cup, money, cups]);
+    c.set = (m, k) => { money.setText(ar(m)); cups.setText(ar(k)); };
+    c.coin = { x: 128, y: 64 };
     return c;
   }
+  refresh() { this.hud.set(this.d.money, this.d.cupsLeft); }
 
-  // ---------- story beats ----------
-  intro() {
-    if (!this.street.isPlaying) this.street.play();
-    this.say("farida", "عندي فكرة! نفتح كشك عصير في شارع الفكرة!");
-    this.next(DEMO ? 1500 : null, () => {
-      this.say("omar", `معانا ${ar(this.state.money)}، والكوباية خاماتها بـ${ar(Kiosk.RULES.cupCost)}. هنعمل كام؟`);
-      this.setup();
-    }, "يلا!");
-  }
-
-  // one big "next" button (or an automatic step in demo mode)
-  next(autoMs, fn, label = "◀") {
-    if (DEMO && autoMs) { this.time.delayedCall(autoMs, fn); return; }
-    const b = this.button(W / 2, H - 120, 300, 100, label, () => { b.destroy(); fn(); });
-    this.uiLayer.add(b);
-  }
-
-  setup() {
-    const st = this.state;
-    const maxC = Kiosk.maxCups(st.money);
-    let cups = Math.min(10, maxC), price = 3;
-    const p = this.panel(520);
-    const y0 = p.top;
-    const title = txt(this, W / 2, y0 + 56, "هتجهّز كام كوباية؟", 38, "#fff6e4");
-    const count = txt(this, W / 2, y0 + 150, "", 64, "#fff6e4");
-    const cost = txt(this, W / 2, y0 + 212, "", 28, "#ffe2a8");
-    const minus = this.button(W / 2 + 190, y0 + 150, 110, 96, "−", () => { if (cups > Kiosk.RULES.minCups) { cups--; refresh(); } }, CREAM, 0xb9ac94, 56);
-    const plus = this.button(W / 2 - 190, y0 + 150, 110, 96, "+", () => { if (cups < maxC) { cups++; refresh(); } }, CREAM, 0xb9ac94, 56);
-    const ptitle = txt(this, W / 2, y0 + 285, "وهتبيع الكوباية بكام؟", 34, "#fff6e4");
-    const prices = [1, 2, 3, 4, 5].map((v, i) => this.button(W / 2 + 240 - i * 120, y0 + 370, 100, 96, ar(v), () => { price = v; refresh(); }, CREAM, 0xb9ac94, 48));
-    const go = this.button(W / 2, y0 + 470, 360, 92, "افتح الكشك", () => { p.destroy(); this.startDay(cups, price); }, SUN, SUN_D, 40);
-    p.add([title, count, cost, minus, plus, ptitle, ...prices, go]);
-    this.uiLayer.add(p);
-    const refresh = () => {
-      count.setText(cupsW(cups));
-      cost.setText(`التكلفة ${ar(cups * 2)} من ${ar(st.money)}`);
-      prices.forEach((b, i) => b.setAlpha(i + 1 === price ? 1 : 0.55).setScale(i + 1 === price ? 1.08 : 1));
-      this.showCups(cups);
-    };
-    refresh();
-    if (DEMO) {
-      const plan = st.dayNo === 0 ? { c: 9, p: 4 } : { c: 11, p: 4 };
-      this.time.delayedCall(1200, () => { cups = Math.min(plan.c, maxC); price = plan.p; refresh(); });
-      this.time.delayedCall(2600, () => { p.destroy(); this.startDay(cups, price); });
-    }
-  }
-
-  // ---------- the cups on the counter ----------
-  cupHome(i) { const per = 10, row = Math.floor(i / per), col = i % per; return { x: COUNTER.x1 - 14 - col * 26, y: COUNTER.top - 18 - row * 34 }; }
-  showCups(n) {
-    this.cupLayer.removeAll(true);
-    this.cups = [];
+  // ---------- cups on the counter ----------
+  cupHome(i) { return { x: COUNTER.x1 - 20 - (i % 8) * 31, y: COUNTER.top - 22 - Math.floor(i / 8) * 40 }; }
+  layCups(n, key = "cup") {
+    this.cupLayer.removeAll(true); this.cups = [];
     for (let i = 0; i < n; i++) {
-      const h = this.cupHome(i);
-      const c = this.add.image(h.x, h.y, "cup").setScale(0.48);
-      c.baseScale = 0.48; c.home = h;
-      this.cupLayer.add(c); this.cups.push(c);
+      const h = this.cupHome(i), c = this.add.image(h.x, h.y, key).setScale(0.55);
+      c.baseScale = 0.55; c.home = h; this.cupLayer.add(c); this.cups.push(c);
     }
   }
-  armCups(on) { this.cups.forEach(c => { if (on) { c.setInteractive({ draggable: true, useHandCursor: true }); this.input.setDraggable(c); } else c.disableInteractive(); }); }
+  backHome(o) { this.cupLayer.add(o); this.tweens.add({ targets: o, x: o.home.x, y: o.home.y, scale: o.baseScale, duration: 220 }); }
 
-  // ---------- a day ----------
-  startDay(cups, price) {
-    const st = this.state;
-    st.dayNo++;
-    this.day = Kiosk.newDay({ money: st.money, cups, price, umbrella: st.umbrella });
-    this.script = Kiosk.script(st.umbrella);
-    this.ptr = 0; this.queue = []; this.busy = false; this.ended = false; this.kunafaOn = false;
-    this.cash = st.money - cups * Kiosk.RULES.cupCost;
-    this.umbrellaSpr.setVisible(st.umbrella);
-    this.hideSay();
-    this.hud.setVisible(true); this.refreshHud();
-    this.armCups(true);
-    this.say("omar", st.dayNo === 1 ? "اسحب الكوباية للزبون!" : "يوم جديد… يلا!", 2200);
-    this.dayStart = this.time.now;
-    this.spawnTimer = this.time.addEvent({ delay: 2100, loop: true, callback: () => this.tick() });
-    this.time.delayedCall(400, () => this.tick());
-    if (DEMO) this.demoServer = this.time.addEvent({ delay: 400, loop: true, callback: () => this.demoServe() });
-  }
-  refreshHud() { this.hud.set(this.cash, this.day.left, "اليوم " + ar(this.state.dayNo) + (this.day.price ? " · السعر " + ar(this.day.price) : "")); }
-
-  tick() {
-    if (this.busy || this.ended) return;
-    if (this.ptr >= this.script.length) { if (this.queue.length === 0 && !this.kunafaOn) this.endDay(); return; }
-    const ev = this.script[this.ptr];
-    if (ev.kind === "heat") { if (this.queue.length) return; this.ptr++; this.heat(); return; }
-    if (ev.kind === "kunafa") { this.ptr++; this.kunafa(); return; }
-    if (this.queue.length >= 3) return;
-    this.ptr++; this.spawn(ev);
-  }
-
-  spawn(ev) {
-    const idx = Math.floor(Math.random() * 6);
-    const c = this.add.container(W + 80, QUEUE_Y);
-    const body = this.add.image(0, 0, "cust" + idx).setOrigin(0.5, 1).setScale(0.95);
-    c.add(body); c.ev = ev; c.body = body; c.state = "walking";
+  // ---------- customers ----------
+  async enter(who) {
+    const isYahya = who === "yahya";
+    const key = isYahya ? "yahya" : `${who}_neutral`;
+    const img = this.add.image(0, 0, key).setOrigin(0.5, 1);
+    img.setScale(isYahya ? 0.62 : (who === "family" ? 1.05 : who === "captain" ? 0.95 : 1.15));
+    const c = this.add.container(W + 160, SPOT.y, [img]);
     this.custLayer.add(c);
-    this.queue.push(c);
-    c.walk = this.tweens.add({ targets: body, y: -8, angle: { from: -3, to: 3 }, duration: 220, yoyo: true, repeat: -1 });
-    this.layoutQueue();
+    this.cust = { who, c, img, isYahya };
+    const bob = this.tweens.add({ targets: img, y: -10, angle: { from: -3, to: 3 }, duration: 210, yoyo: true, repeat: -1 });
+    await new Promise(r => this.tweens.add({ targets: c, x: SPOT.x + (who === "family" ? 40 : 0), duration: 1300, ease: "Sine.out", onComplete: r }));
+    bob.stop(); img.y = 0; img.angle = 0;
+    this.tweens.add({ targets: img, scaleY: img.scaleY * 0.92, scaleX: img.scaleX * 1.05, duration: 110, yoyo: true });
+    return this.cust;
   }
-
-  layoutQueue() {
-    this.queue.forEach((c, i) => {
-      const x = QUEUE_X[i];
-      if (c.targetX === x) return;
-      c.targetX = x;
-      this.tweens.add({ targets: c, x, duration: Math.abs(c.x - x) * 3.2 + 150, ease: "Linear", onComplete: () => { if (i === 0 && this.queue[0] === c) this.arrive(c); else if (c.walk && this.queue.indexOf(c) > 0) { c.walk.pause(); c.body.y = 0; c.body.angle = 0; } } });
-      if (c.walk && c.walk.isPaused()) c.walk.resume();
-    });
-  }
-
-  arrive(c) {
-    if (c.state !== "walking") return;
-    c.walk.pause(); c.body.y = 0; c.body.angle = 0;
-    const want = Kiosk.intent(this.day, c.ev.wtp);
-    if (want === "buy") {
-      c.state = "waiting";
-      c.bub = this.thought(c, "cup");
-      c.patience = this.time.delayedCall(10000, () => { if (c.state === "waiting") { c.bub.destroy(); this.thought(c, "مستعجل…"); this.day.walkedOff++; this.leave(c, 900); } });
-      if (this.state.dayNo === 1 && !this.hinted) { this.hinted = true; this.hint(c); }
-    } else {
-      c.state = "leaving";
-      if (want === "price") this.day.tooDear++; else this.day.missed++;
-      this.thought(c, want === "price" ? "غالي!" : "خلص؟!");
-      this.leave(c, 1100);
+  react(expr, fx) {
+    const { who, img, isYahya, c } = this.cust;
+    if (!isYahya) img.setTexture(`${who}_${expr}`);
+    if (expr === "happy") {
+      this.tweens.add({ targets: img, y: -40, duration: 180, yoyo: true, ease: "Quad.out" });
+      this.burst(c.x, c.y - 300, fx || "heart", 7);
+    } else if (expr === "sad") {
+      this.tweens.add({ targets: c, x: c.x + 8, duration: 60, yoyo: true, repeat: 3 });
+    } else if (expr === "surprised") {
+      this.tweens.add({ targets: img, scaleY: img.scaleY * 1.1, duration: 120, yoyo: true });
     }
   }
-
-  thought(c, what) {
-    const b = this.add.container(0, -215);
-    const g = this.add.graphics().fillStyle(0xffffff).fillRoundedRect(-62, -44, 124, 80, 26).lineStyle(4, INK).strokeRoundedRect(-62, -44, 124, 80, 26)
-      .fillStyle(0xffffff).fillTriangle(-12, 34, 12, 34, 0, 52).lineStyle(4, INK).lineBetween(-12, 37, 0, 52).lineBetween(0, 52, 12, 37);
-    b.add(g);
-    if (what === "cup") b.add(this.add.image(0, -4, "cup").setScale(0.62));
-    else b.add(txt(this, 0, -4, what, 30));
-    b.setScale(0); this.tweens.add({ targets: b, scale: 1, duration: 220, ease: "Back.out" });
-    c.add(b);
-    return b;
-  }
-
-  hint(c) {
-    const cup = this.cups[this.cups.length - 1]; if (!cup) return;
-    const hand = txt(this, cup.x, cup.y, "👆", 64).setDepth(9);
-    this.fxLayer.add(hand);
-    this.tweens.add({ targets: hand, x: c.x, y: c.y - 120, duration: 1100, repeat: 2, repeatDelay: 300, onComplete: () => hand.destroy() });
-  }
-
-  dropCup(cup) {
-    const front = this.queue[0];
-    const ok = front && front.state === "waiting" && Phaser.Math.Distance.Between(cup.x, cup.y, front.x, front.y - 100) < SERVE_ZONE;
-    if (!ok) { // back to the counter
-      this.cupLayer.add(cup);
-      this.tweens.add({ targets: cup, x: cup.home.x, y: cup.home.y, scale: cup.baseScale, duration: 220 });
-      return;
+  burst(x, y, key, n) {
+    for (let i = 0; i < n; i++) {
+      const p = this.add.image(x, y, key).setScale(0.8);
+      this.fx.add(p);
+      this.tweens.add({ targets: p, x: x + Phaser.Math.Between(-150, 150), y: y - Phaser.Math.Between(40, 200), alpha: 0, angle: Phaser.Math.Between(-90, 90), scale: 1.2, duration: 900, ease: "Quad.out", onComplete: () => p.destroy() });
     }
-    this.serve(front, cup);
   }
-
-  serve(c, cup) {
-    if (!Kiosk.serve(this.day)) return;
-    c.state = "leaving";
-    if (c.patience) c.patience.remove();
-    this.cups.splice(this.cups.indexOf(cup), 1);
-    cup.disableInteractive();
-    this.tweens.add({ targets: cup, x: c.x - 30, y: c.y - 110, scale: 0.5, duration: 160 });
-    c.bub.destroy();
-    this.thought(c, "شكرًا!");
-    const paid = this.day.price;
-    // coins fly to the money pill
-    for (let i = 0; i < paid; i++) {
-      const coin = this.add.image(c.x, c.y - 120, "coin").setScale(0.55);
-      this.fxLayer.add(coin);
-      this.tweens.add({ targets: coin, x: this.hud.coinPos.x, y: this.hud.coinPos.y, duration: 520, delay: i * 90, ease: "Cubic.in",
-        onComplete: () => { coin.destroy(); this.cash++; this.refreshHud(); this.sound.play("coin", { volume: 0.5, rate: 1 + Math.random() * 0.2 }); } });
+  async leave() {
+    const { c, img } = this.cust;
+    img.setFlipX(true);
+    this.tweens.add({ targets: img, y: -10, duration: 210, yoyo: true, repeat: 6 });
+    await new Promise(r => this.tweens.add({ targets: c, x: -200, duration: 1300, ease: "Sine.in", onComplete: r }));
+    c.destroy(); this.cust = null;
+  }
+  async pay(amount, key = "coin", from) {
+    const sx = this.cust.c.x, sy = this.cust.c.y - 200;
+    const items = key === "note5" ? 1 : amount;
+    for (let i = 0; i < items; i++) {
+      const o = this.add.image(sx, sy, key).setScale(key === "note5" ? 0.9 : 0.6);
+      this.fx.add(o);
+      this.tweens.add({ targets: o, x: this.hud.coin.x, y: this.hud.coin.y, duration: 560, delay: i * 110, ease: "Cubic.in",
+        onComplete: () => { o.destroy(); this.play("coin", { volume: 0.5, rate: 0.95 + Math.random() * 0.2 }); } });
     }
-    this.time.delayedCall(250, () => { cup.destroy(); this.relayoutCups(); this.refreshHud(); });
-    this.leave(c, 700);
+    await this.wait(560 + items * 110);
   }
 
-  relayoutCups() { this.cups.forEach((c, i) => { c.home = this.cupHome(i); this.tweens.add({ targets: c, x: c.home.x, y: c.home.y, duration: 200 }); }); }
-
-  leave(c, delay) {
-    c.state = "leaving";
-    this.time.delayedCall(delay, () => {
-      const i = this.queue.indexOf(c); if (i >= 0) this.queue.splice(i, 1);
-      c.walk.resume();
-      c.body.setFlipX(true);
-      this.tweens.add({ targets: c, x: -120, duration: 1500, onComplete: () => c.destroy() });
-      this.layoutQueue();
-    });
-  }
-
-  // ---------- events ----------
-  kunafa() {
-    if (this.day.left <= 0) return;
-    this.kunafaOn = true;
-    this.say("omar", "خلي بالك! كنافة جاية… دوس عليها!", 3500);
-    const cat = this.add.image(W + 60, COUNTER.top + 40, "kunafa").setOrigin(0.5, 1).setScale(0.55).setInteractive({ useHandCursor: true });
-    this.fxLayer.add(cat);
-    this.tweens.add({ targets: cat, y: cat.y - 6, duration: 160, yoyo: true, repeat: -1 });
-    const run = this.tweens.add({ targets: cat, x: COUNTER.x1 + 40, duration: 4000, ease: "Linear" });
-    let done = false;
-    const finish = shooed => {
-      if (done) return; done = true; run.stop(); cat.disableInteractive();
-      const lost = Kiosk.kunafa(this.day, shooed);
-      if (shooed) {
-        this.sound.play("boing", { volume: 0.6 });
-        this.say("omar", "برافو! الكوبايات سليمة.", 1800);
-      } else {
-        this.sound.play("crash", { volume: 0.7 });
-        for (let k = 0; k < lost; k++) {
-          const cup = this.cups.pop(); if (!cup) break;
-          cup.disableInteractive();
-          this.tweens.add({ targets: cup, y: cup.y + 260, angle: 140, alpha: 0, duration: 700, delay: k * 120, onComplete: () => cup.destroy() });
-        }
-        this.say("omar", `كنافة وقّعت ${cupsW(lost)}…`, 2200);
-        this.refreshHud();
+  // drag n cups (of `key`) to the customer; resolves when served
+  serve(n, key = "cup") {
+    return new Promise(res => {
+      let got = 0;
+      const target = () => ({ x: this.cust.c.x, y: this.cust.c.y - 170 });
+      const counter = n > 1 ? T(this, SPOT.x, SPOT.y - 420, `${ar(0)} / ${ar(n)}`, 40, "#fff6e4", { backgroundColor: "#2b1a12", padding: { x: 18, y: 6 } }).setDepth(13) : null;
+      const armed = this.cups.slice();
+      const onDrop = o => {
+        const t = target();
+        if (Phaser.Math.Distance.Between(o.x, o.y, t.x, t.y) > 190) return this.backHome(o);
+        o.disableInteractive(); this.cups.splice(this.cups.indexOf(o), 1);
+        this.tweens.add({ targets: o, x: t.x - 20 + got * 14, y: t.y + 20, scale: 0.45, duration: 150, onComplete: () => this.time.delayedCall(250, () => o.destroy()) });
+        this.play("boing", { volume: 0.3, rate: 1.3 + got * 0.1 });
+        got++; if (counter) counter.setText(`${ar(got)} / ${ar(n)}`);
+        if (got >= n) { armed.forEach(a => a.active && a.disableInteractive()); if (counter) counter.destroy(); if (hand) hand.destroy(); res(); }
+      };
+      armed.forEach(o => { o.setTexture(key); o.onDrop = onDrop; o.setInteractive({ draggable: true, useHandCursor: true }); this.input.setDraggable(o); });
+      let hand = null;
+      if (!this.taught && !DEMO) {
+        this.taught = true;
+        const from = this.cups[this.cups.length - 1];
+        hand = T(this, from.x, from.y, "👆", 70).setDepth(14);
+        this.tweens.add({ targets: hand, x: target().x, y: target().y, duration: 1100, repeat: -1, repeatDelay: 400 });
       }
-      cat.setFlipX(true);
-      this.tweens.add({ targets: cat, x: W + 120, duration: 900, delay: 200, onComplete: () => { cat.destroy(); this.kunafaOn = false; } });
-    };
-    cat.on("pointerdown", () => finish(true));
-    this.time.delayedCall(4000, () => finish(false));
-    if (DEMO) this.time.delayedCall(1800, () => finish(true));
-  }
-
-  heat() {
-    this.busy = true;
-    this.sound.play("sparkle", { volume: 0.4 });
-    this.tweens.add({ targets: this.sun, y: 260, duration: 900, ease: "Back.out" });
-    this.tweens.add({ targets: this.heatTint, alpha: 0.13, duration: 900 });
-    this.time.delayedCall(700, () => {
-      this.say("farida", this.state.umbrella ? "الحر زاد… والشمسية جايبة ناس كتير! نعلّي السعر جنيه؟" : "الحر زاد! الناس عطشانة… نعلّي السعر جنيه؟");
-      if (this.day.price >= Kiosk.RULES.maxPrice) { this.time.delayedCall(1500, () => this.afterHeat()); return; }
-      const p = this.panel(170);
-      const yes = this.button(W / 2 + 150, p.top + 85, 260, 96, "علّي لـ" + ar(this.day.price + 1), () => { Kiosk.raise(this.day); p.destroy(); this.afterHeat(); });
-      const no = this.button(W / 2 - 150, p.top + 85, 260, 96, "خليه " + ar(this.day.price), () => { p.destroy(); this.afterHeat(); }, CREAM, 0xb9ac94);
-      p.add([yes, no]); this.uiLayer.add(p);
-      if (DEMO) this.time.delayedCall(1600, () => { p.destroy(); this.afterHeat(); });
+      if (DEMO) {
+        let k = 0;
+        const go = () => {
+          const o = this.cups[this.cups.length - 1]; if (!o) return;
+          this.fx.add(o); o.setScale(o.baseScale * 1.25);
+          this.tweens.add({ targets: o, x: target().x, y: target().y, duration: 620, ease: "Sine.inOut", onComplete: () => { onDrop(o); if (++k < n) this.time.delayedCall(250, go); } });
+        };
+        this.time.delayedCall(900, go);
+      }
     });
   }
-  afterHeat() { this.hideSay(); this.refreshHud(); this.busy = false; this.spawnTimer.delay = 1700; }
 
-  // ---------- end of day: Omar's notebook, then the shop or the comparison ----------
-  endDay() {
-    this.ended = true;
-    this.spawnTimer.remove(); if (this.demoServer) this.demoServer.remove();
-    this.armCups(false);
-    this.tweens.add({ targets: this.sun, y: -160, duration: 700 });
-    this.tweens.add({ targets: this.heatTint, alpha: 0, duration: 700 });
-    const r = Kiosk.close(this.day);
-    this.state.money = r.moneyAfter;
-    this.state.history.push(r);
-    this.time.delayedCall(800, () => this.notebook(r));
+  // give change from the drawer; resolves when the right change was given
+  change(price, paid) {
+    return new Promise(res => {
+      const bg = this.add.graphics().fillStyle(0x2b1a12, 0.9).fillRoundedRect(14, H - 175, W - 28, 160, 30);
+      const head = T(this, W / 2, 330, `اداك ${ar(paid)} · السعر ${ar(price)} · الباقي؟`, 34, "#fff6e4", { backgroundColor: "#2b1a12", padding: { x: 20, y: 8 } });
+      const tray = this.add.graphics().fillStyle(0x8a5a3a).fillRoundedRect(190, H - 160, W - 214, 100, 22).lineStyle(4, INK).strokeRoundedRect(190, H - 160, W - 214, 100, 22);
+      const given = T(this, 100, H - 135, `اديته: ${ar(0)}`, 26, "#ffe2a8");
+      this.ui.add([bg, head, tray, given]);
+      const coins = [];
+      let g = 0;
+      const t = () => ({ x: this.cust.c.x, y: this.cust.c.y - 170 });
+      const drop = o => {
+        if (Phaser.Math.Distance.Between(o.x, o.y, t().x, t().y) > 200) { this.ui.add(o); this.tweens.add({ targets: o, x: o.home.x, y: o.home.y, scale: o.baseScale, duration: 200 }); return; }
+        o.disableInteractive(); g++; given.setText(`اديته: ${ar(g)}`);
+        this.play("coin", { volume: 0.5 });
+        this.tweens.add({ targets: o, x: t().x, y: t().y + 30, scale: 0.4, alpha: 0, duration: 250 });
+      };
+      for (let i = 0; i < 6; i++) {
+        const o = this.add.image(W - 70 - i * 78, H - 110, "coin").setScale(0.85);
+        o.baseScale = 0.85; o.home = { x: o.x, y: o.y }; o.onDrop = drop;
+        o.setInteractive({ draggable: true, useHandCursor: true }); this.input.setDraggable(o);
+        this.ui.add(o); coins.push(o);
+      }
+      const ok = this.button(100, H - 70, 150, 70, "خلاص", async () => {
+        const r = KioskA.change(price, paid, g);
+        if (r.ok) { cleanup(); res(r); return; }
+        if (r.short) { this.react("surprised"); await this.say(this.cust.who, `لسه ناقص ${ar(r.short)}!`, { ms: 1500 }); }
+        else { this.react("surprised"); await this.say(this.cust.who, `ده كتير! خد ${ar(r.extra)} تاني… أنا أمين 😄`, { ms: 2200 }); cleanup(); res({ ok: true, honest: true }); }
+      }, CREAM, GREY, 30);
+      const cleanup = () => { [bg, head, tray, given, ok, ...coins].forEach(o => o.destroy()); };
+      if (DEMO) {
+        const give = i => { const o = coins[i]; this.tweens.add({ targets: o, x: t().x, y: t().y, duration: 600, delay: 300, onComplete: () => drop(o) }); };
+        this.time.delayedCall(1400, () => give(0)); this.time.delayedCall(2600, () => give(1));
+        this.time.delayedCall(4000, () => ok.emit("pointerup"));
+      }
+    });
   }
 
-  notebook(r) {
-    this.hud.setVisible(false);
-    const c = this.add.container(0, 0).setDepth(11);
+  // ---------- the day, written like an episode ----------
+  async run() {
+    await this.wait(400);
+    if (!this.street.isPlaying) this.street.play();
+    this.d = KioskA.newDay();
+    this.layCups(KioskA.R.cups); this.refresh();
+    await this.say("farida", "عندي فكرة! الحر نار… نفتح الكشك!");
+    await this.say("omar", `جهّزنا ${ar(8)} كوبايات، كل واحدة بـ${ar(2)}. والسعر ${ar(3)}.`);
+    this.hush();
+
+    // 1 · Suad: a plain sale (teaches the drag)
+    await this.enter("suad");
+    await this.say("suad", "صباح الفل! واحد عصير لو سمحت.");
+    await this.serve(1);
+    this.react("happy");
+    KioskA.sell(this.d, 1, 3); await this.pay(3); this.refresh();
+    await this.say("suad", "تسلم إيدك يا حبيبي!", { ms: 1400, expr: "happy" });
+    this.hush(); await this.leave();
+
+    // 2 · Yahya pays with a 5: give change
+    await this.enter("yahya");
+    await this.say("yahya", `عايز واحدة… ومعايا ${ar(5)}!`);
+    this.hush();
+    await this.serve(1);
+    KioskA.sell(this.d, 1, 3); await this.pay(5, "note5"); this.refresh();
+    this.d.money -= 2; // the change leaves the drawer once given
+    const ch = await this.change(3, 5);
+    this.refresh();
+    this.react("happy", "star");
+    await this.say("yahya", ch.honest ? "كده مظبوط! باي!" : "مظبوط! انت شاطر 👍", { ms: 1500 });
+    this.hush(); await this.leave();
+
+    // Kunafa: spend 1 to protect 4
+    const cat = this.add.image(W + 80, COUNTER.top - 10, "kunafa").setOrigin(0.5, 1).setScale(0.5).setDepth(6);
+    this.tweens.add({ targets: cat, x: COUNTER.x1 - 40, y: COUNTER.top - 10, duration: 1200, ease: "Sine.out" });
+    this.tweens.add({ targets: cat, y: COUNTER.top - 60, duration: 300, yoyo: true, delay: 900 });
+    await this.wait(1300);
+    await this.say("omar", "كنافة طلعت على الترابيزة! عينها على الكوبايات…", { ms: 1600 });
+    const feed = await this.choose("هتعمل إيه؟", [{ label: "أكل ليها", sub: `بـ${ar(1)} وتقعد هادية` }, { label: "سيبها", sub: "يمكن ماتعملش حاجة" }], 0);
+    this.hush();
+    if (feed === 0) {
+      KioskA.feedCat(this.d); this.refresh();
+      const fish = this.add.image(560, 900, "fish").setScale(1).setDepth(7);
+      this.tweens.add({ targets: fish, x: cat.x - 30, y: cat.y - 60, duration: 600, ease: "Quad.out", onComplete: () => fish.destroy() });
+      await this.wait(600);
+      this.play("sparkle", { volume: 0.4 });
+      this.burst(cat.x, cat.y - 120, "heart", 5);
+      this.tweens.add({ targets: cat, angle: { from: -4, to: 4 }, duration: 200, yoyo: true, repeat: 3 });
+      await this.say("omar", `دفعنا ${ar(1)} وحمينا الكوبايات. كل كوباية بـ${ar(2)}!`, { ms: 2200 });
+    } else {
+      this.tweens.add({ targets: cat, x: cat.x - 120, duration: 300 });
+      await this.wait(300);
+      this.play("crash", { volume: 0.7 }); this.cameras.main.shake(250, 0.01);
+      const lost = KioskA.catKnocks(this.d);
+      for (let k = 0; k < lost; k++) { const o = this.cups.pop(); if (o) this.tweens.add({ targets: o, y: o.y + 300, angle: 160, alpha: 0, duration: 700, delay: k * 120, onComplete: () => o.destroy() }); }
+      this.refresh();
+      await this.say("farida", `يا خبر! ${ar(lost)} كوبايات وقعوا… دول بـ${ar(lost * 2)}!`, { ms: 2200 });
+    }
+    this.tweens.add({ targets: cat, x: -150, duration: 1100, ease: "Sine.in", onComplete: () => cat.destroy() });
+    this.hush();
+
+    // 3 · Shawky haggles
+    await this.enter("shawky");
+    await this.say("shawky", `${ar(3)}؟! غالي… أديك ${ar(2)}!`, { expr: "surprised" });
+    this.react("surprised");
+    await this.say("omar", `في الكشكول: الكوباية مكلفانا ${ar(2)}…`, { ms: 1700 });
+    const haggle = await this.choose("عم شوقي عايزها بـ" + ar(2), [{ label: "لأ، بـ" + ar(3), sub: "ده سعرنا" }, { label: "ماشي بـ" + ar(2), sub: "عشان يفرح" }], 0);
+    let shawkyPrice = 3;
+    if (haggle === 1) { shawkyPrice = 2; await this.say("shawky", "انت جدع! 😄", { ms: 1200, expr: "happy" }); this.react("happy"); }
+    else { await this.say("shawky", "ماشي يا سيدي… هات تلاتة.", { ms: 1500 }); }
+    this.hush();
+    await this.serve(1);
+    KioskA.sell(this.d, 1, shawkyPrice); await this.pay(shawkyPrice); this.refresh();
+    if (haggle === 1) await this.say("omar", `بعناها بـ${ar(2)}… يعني ماكسبناش منها ولا مليم.`, { ms: 2200 });
+    else { this.react("happy"); await this.say("shawky", "بس عصيرك حلو، أعترف!", { ms: 1500, expr: "happy" }); }
+    this.hush(); await this.leave();
+
+    // 4 · the family: four cups, then asks for something cold
+    await this.enter("family");
+    const want = Math.min(4, this.d.cupsLeft);
+    await this.say("family", `${ar(want)} كوبايات لو سمحت!`);
+    this.hush();
+    await this.serve(want);
+    KioskA.sell(this.d, want, 3); this.react("happy"); await this.pay(want * 3); this.refresh();
+    await this.say("family", "حلو… بس مافيش حاجة ساقعة؟ الجو نار!", { ms: 2000, expr: "sad" });
+    this.react("sad");
+    this.hush(); await this.leave();
+
+    // 5 · the captain wants it cold, now
+    await this.enter("captain");
+    await this.say("captain", "حاجة ساقعة بسرعة! لسه مخلّص ماتش!", { expr: "surprised" });
+    this.react("sad");
+    await this.say("farida", "مافيش ساقع… 😔", { ms: 1300 });
+    await this.say("captain", "خلاص… هروح أدوّر في حتة تانية.", { ms: 1600, expr: "sad" });
+    KioskA.miss(this.d);
+    this.hush(); await this.leave();
+
+    // end of the day
+    const r = KioskA.close(this.d);
+    await this.notebook(r);
+    await this.say("omar", "ناس كتير طلبوا ساقع… لو كان عندنا تلاجة ثلج؟", { ms: 2200 });
+    const buy = await this.shop(r.money);
+    if (buy) await this.epilogue(); else await this.say("omar", `ماشي، حوّشنا. معانا ${ar(r.money)}.`, { ms: 2000 });
+    await this.finale(buy);
+  }
+
+  async notebook(r) {
     const x0 = 50, x1 = W - 50, y0 = 250;
-    const lines = [
-      ["بعنا", cupsW(r.sold)],
-      ["دخل معانا", ar(r.revenue)],
-      ["الخامات", `${ar(r.cups)} × ${ar(2)} = ${ar(r.cost)}`],
-      ...(r.fell ? [["وقع من كنافة", cupsW(r.fell)]] : []),
-      ...(r.spoiled ? [["باظ آخر اليوم", cupsW(r.spoiled)]] : []),
-      ["المكسب", sgn(r.profit)],
-      ["فلوسك دلوقتي", ar(r.moneyAfter)],
-    ];
-    const h = 120 + lines.length * 70;
-    const g = this.add.graphics().fillStyle(INK, 0.4).fillRoundedRect(x0, y0 + 10, x1 - x0, h, 22)
-      .fillStyle(0xfffdf3).fillRoundedRect(x0, y0, x1 - x0, h, 22).lineStyle(5, INK).strokeRoundedRect(x0, y0, x1 - x0, h, 22);
-    for (let i = 0; i < lines.length; i++) g.lineStyle(2, 0xcfe3f2).lineBetween(x0 + 20, y0 + 150 + i * 70, x1 - 20, y0 + 150 + i * 70);
-    c.add([g, txt(this, W / 2, y0 + 50, "📒 كشكول عمر · اليوم " + ar(this.state.dayNo), 36)]);
-    this.uiLayer.add(c);
-    lines.forEach(([k, v], i) => {
-      const y = y0 + 115 + i * 70;
-      const big = k === "المكسب";
-      const a = txt(this, x1 - 40, y, k, big ? 40 : 34).setOrigin(1, 0.5).setAlpha(0);
-      const b = txt(this, x0 + 40, y, v, big ? 42 : 34, big ? (r.profit > 0 ? "#3f8a3a" : "#c8553d") : "#3b2016").setOrigin(0, 0.5).setAlpha(0);
+    const rows = [["دخل معانا", ar(r.revenue)], ["التكاليف", ar(r.costs) + (r.expenses.length ? " (فيها أكل كنافة)" : "")], ...(r.lostCups ? [["وقع", ar(r.lostCups) + " كوبايات"]] : []), ["المكسب", sgn(r.profit)], ["معانا دلوقتي", ar(r.money)]];
+    const h = 130 + rows.length * 72;
+    const c = this.add.container(0, 0);
+    const g = this.add.graphics().fillStyle(INK, 0.4).fillRoundedRect(x0, y0 + 10, x1 - x0, h, 22).fillStyle(0xfffdf3).fillRoundedRect(x0, y0, x1 - x0, h, 22).lineStyle(5, INK).strokeRoundedRect(x0, y0, x1 - x0, h, 22);
+    c.add([g, T(this, W / 2, y0 + 52, "📒 كشكول عمر", 38)]);
+    this.ui.add(c);
+    for (let i = 0; i < rows.length; i++) {
+      const [k, v] = rows[i], y = y0 + 125 + i * 72, big = k === "المكسب";
+      const a = T(this, x1 - 40, y, k, big ? 40 : 34).setOrigin(1, 0.5).setAlpha(0);
+      const b = T(this, x0 + 40, y, v, big ? 42 : 32, big ? (r.profit > 0 ? "#3f8a3a" : "#c8553d") : "#3b2016").setOrigin(0, 0.5).setAlpha(0);
       c.add([a, b]);
-      this.tweens.add({ targets: [a, b], alpha: 1, x: "-=0", duration: 250, delay: 500 + i * 550, onStart: () => this.sound.play("boing", { volume: 0.15, rate: 2 }) });
-    });
-    const after = 600 + lines.length * 550;
-    this.time.delayedCall(after, () => {
-      if (r.left === 0 && r.fell === 0 && r.profit <= 0) this.say("farida", "بعنا كله… إزاي ماكسبناش؟!");
-      else if (r.fell) this.say("omar", "كنافة كلّفتنا كوبايتين… المرة الجاية ناخد بالنا.");
-      else if (r.spoiled > 2) this.say("omar", `${cupsW(r.spoiled)} باظت… كان ممكن نعمل أقل.`);
-      else if (r.profit > 0) { this.say("farida", "كسبنا! 🎉"); this.sound.play("sparkle", { volume: 0.5 }); }
-      else this.say("omar", "الزباين مشيوا عشان غالي…");
-      this.next(DEMO ? 2600 : null, () => { c.destroy(); this.state.dayNo === 1 ? this.shop() : this.compare(); }, "◀");
+      await this.wait(550); this.play("boing", { volume: 0.15, rate: 2 });
+      this.tweens.add({ targets: [a, b], alpha: 1, duration: 220 });
+    }
+    await this.wait(900);
+    await this.next();
+    c.destroy();
+  }
+
+  shop(money) {
+    return new Promise(async res => {
+      const c = this.add.container(0, 0);
+      const g = this.add.graphics().fillStyle(0x2b1a12, 0.9).fillRoundedRect(20, 250, W - 40, 760, 34)
+        .fillStyle(CREAM).fillRoundedRect(60, 300, W - 120, 470, 26).lineStyle(4, INK).strokeRoundedRect(60, 300, W - 120, 470, 26);
+      const pic = this.add.image(W / 2, 450, "iceBox").setScale(0.9);
+      const name = T(this, W / 2, 610, "تلاجة ثلج · " + ar(KioskA.R.iceBox), 40);
+      const desc = T(this, W / 2, 690, `الساقع بيتباع بـ${ar(KioskA.R.coldPrice)} بدل ${ar(KioskA.R.price)}\nوالزباين اللي مشيوا هيرجعوا`, 28, "#6b4a3a");
+      const m = T(this, W / 2, 830, "معاك: " + ar(money), 34, "#fff6e4");
+      c.add([g, pic, name, desc, m]); this.ui.add(c);
+      this.tweens.add({ targets: pic, y: 440, duration: 700, yoyo: true, repeat: -1, ease: "Sine.inOut" });
+      const can = KioskA.buyIceBox(money) !== null;
+      const b1 = this.button(W / 2 + 150, 930, 260, 100, can ? "اشتري" : "مش كفاية", () => { if (!can) return; done(true); });
+      const b2 = this.button(W / 2 - 150, 930, 260, 100, "أحوّش", () => done(false), CREAM, GREY);
+      const done = v => { [c, b1, b2].forEach(o => o.destroy()); res(v); };
+      if (DEMO) this.time.delayedCall(3000, () => b1.emit("pointerup"));
     });
   }
 
-  shop() {
-    const st = this.state;
-    this.say("sitto", "الراديو بيقول: بكرة حر جدًا! ☀️");
-    const p = this.panel(600);
-    const y0 = p.top;
-    const card = this.add.graphics().fillStyle(CREAM).fillRoundedRect(60, y0 + 40, W - 120, 380, 26).lineStyle(4, INK).strokeRoundedRect(60, y0 + 40, W - 120, 380, 26);
-    const pic = this.add.image(W / 2, y0 + 160, "umbrella").setScale(0.62);
-    const name = txt(this, W / 2, y0 + 270, "شمسية للكشك · " + ar(Kiosk.RULES.umbrellaCost), 38);
-    const desc = txt(this, W / 2, y0 + 340, "في الحر بتجيب زباين أكتر.\nفي الجو العادي مابتفيدش.", 28, "#6b4a3a");
-    const money = txt(this, W / 2, y0 + 455, "فلوسك: " + ar(st.money), 32, "#fff6e4");
-    const can = st.money - Kiosk.RULES.umbrellaCost >= Kiosk.RULES.cupCost * Kiosk.RULES.minCups;
-    const buy = this.button(W / 2 + 150, y0 + 540, 260, 92, can ? "اشتري" : "مش كفاية", () => {
-      if (!can) return;
-      st.money -= Kiosk.RULES.umbrellaCost; st.umbrella = true; p.destroy();
-      this.sound.play("sparkle", { volume: 0.6 });
-      this.umbrellaSpr.setVisible(true).setScale(0.2);
-      this.tweens.add({ targets: this.umbrellaSpr, scale: 1, duration: 600, ease: "Back.out" });
-      this.say("omar", `اشترينا الشمسية. فلوسنا بقت ${ar(st.money)}… نشوف هترجّع تمنها؟`);
-      this.next(DEMO ? 2200 : null, () => this.nextDay(), "اليوم التاني ◀");
-    });
-    const skip = this.button(W / 2 - 150, y0 + 540, 260, 92, "لأ، شكرًا", () => {
-      p.destroy(); this.say("omar", `ماشي، هنحوّش. فلوسنا ${ar(st.money)}.`);
-      this.next(DEMO ? 1800 : null, () => this.nextDay(), "اليوم التاني ◀");
-    }, CREAM, 0xb9ac94);
-    if (!can) buy.setAlpha(0.5);
-    p.add([card, pic, name, desc, money, buy, skip]);
-    this.uiLayer.add(p);
-    if (DEMO) this.time.delayedCall(2600, () => buy.emit("pointerup"));
+  async epilogue() {
+    this.d.money = KioskA.buyIceBox(this.d.money); this.refresh();
+    this.iceBox.setVisible(true).setScale(0.05);
+    this.play("sparkle", { volume: 0.6 });
+    this.tweens.add({ targets: this.iceBox, scale: 0.55, duration: 700, ease: "Back.out" });
+    this.burst(this.iceBox.x + 60, this.iceBox.y - 40, "star", 12);
+    await this.say("farida", "تلاجة ثلج! بكرة هنبيع ساقع! ❄️", { ms: 2000 });
+    // a peek at tomorrow
+    this.hush();
+    this.cameras.main.flash(300, 255, 255, 255);
+    T(this, W / 2, 230, "بكرة…", 60, "#fff6e4", { backgroundColor: "#2b1a12", padding: { x: 30, y: 10 } }).setDepth(14).setName("tomorrow");
+    this.layCups(6, "coldCup");
+    await this.wait(900);
+    this.children.getByName("tomorrow").destroy();
+    await this.enter("captain");
+    await this.say("captain", "سمعت إن عندكم ساقع؟!", { expr: "surprised" });
+    this.hush();
+    await this.serve(1, "coldCup");
+    this.react("happy", "star");
+    await this.pay(KioskA.R.coldPrice + 1);
+    this.d.money += KioskA.R.coldPrice + 1; this.refresh();
+    await this.say("captain", `ساقع ومظبوط! خد ${ar(KioskA.R.coldPrice)}… وواحد بقشيش! 🥇`, { ms: 2400, expr: "happy" });
+    this.burst(W / 2, 500, "star", 16);
+    this.hush(); await this.leave();
   }
 
-  nextDay() {
-    this.say("omar", `معانا ${ar(this.state.money)}. هنعمل كام كوباية النهارده؟`);
-    this.setup();
-  }
-
-  compare() {
-    const h = this.state.history;
-    const c = this.add.container(0, 0).setDepth(11);
-    const g = this.add.graphics().fillStyle(0xfffdf3).fillRoundedRect(40, 260, W - 80, 470, 22).lineStyle(5, INK).strokeRoundedRect(40, 260, W - 80, 470, 22);
-    c.add([g, txt(this, W / 2, 310, "اليومين جنب بعض", 36)]);
-    const cols = ["اليوم", "كوبايات", "السعر", "دخل", "المكسب"];
-    const xs = [600, 480, 370, 260, 130];
-    cols.forEach((t, i) => c.add(txt(this, xs[i], 380, t, 26, "#6b4a3a")));
-    h.forEach((r, row) => {
-      const y = 450 + row * 80;
-      const vals = [ar(row + 1) + (row === 1 && this.state.umbrella ? " ⛱" : ""), ar(r.cups), ar(r.price), ar(r.revenue), sgn(r.profit)];
-      vals.forEach((v, i) => c.add(txt(this, xs[i], y, v, 34, i === 4 ? (r.profit > 0 ? "#3f8a3a" : "#c8553d") : "#3b2016")));
-    });
-    c.add(txt(this, W / 2, 640, "فلوسك في الآخر: " + ar(this.state.money) + (this.state.umbrella ? " + شمسية" : ""), 32));
-    this.uiLayer.add(c);
-    this.say("sitto", this.state.umbrella ? "الشمسية رجّعت تمنها؟ بصّوا على المكسب." : "إيه اللي ممكن يتغيّر لو اشترينا الشمسية؟");
-    const again = this.button(W / 2, H - 130, 360, 100, "العب تاني 🔁", () => this.scene.restart());
-    this.uiLayer.add(again);
+  async finale(bought) {
+    const c = this.add.container(0, 0);
+    const g = this.add.graphics().fillStyle(0xfffdf3).fillRoundedRect(50, 300, W - 100, 420, 26).lineStyle(5, INK).strokeRoundedRect(50, 300, W - 100, 420, 26);
+    c.add([g, T(this, W / 2, 360, bought ? "التلاجة رجّعت جزء من تمنها من أول زبون!" : "حوّشت فلوسك", 32),
+      T(this, W / 2, 470, "الهدف الجاي 🍦", 40), T(this, W / 2, 545, "عربية آيس كريم · " + ar(50), 36, "#3f8a3a"),
+      T(this, W / 2, 625, "معاك " + ar(this.d.money) + " من " + ar(50), 30, "#6b4a3a")]);
+    this.ui.add(c);
+    await this.say("sitto", bought ? "شاطر! صرفت عشان تكسب أكتر. ولو كنت عملت حاجة تانية مع عم شوقي؟" : "التحويش حلو… بس الزباين اللي مشيوا؟ جرّب تاني!", { ms: 3000 });
     window.__done = true;
-  }
-
-  // demo: serve the front customer like a child would (drag a cup over)
-  demoServe() {
-    const front = this.queue[0];
-    if (!front || front.state !== "waiting" || this.demoBusy) return;
-    const cup = this.cups[this.cups.length - 1]; if (!cup) return;
-    this.demoBusy = true;
-    this.fxLayer.add(cup); cup.setScale(cup.baseScale * 1.25);
-    this.tweens.add({ targets: cup, x: front.x, y: front.y - 100, duration: 650, delay: 500, ease: "Sine.inOut", onComplete: () => { this.demoBusy = false; this.serve(front, cup); } });
+    this.button(W / 2, H - 130, 380, 104, "العب تاني 🔁", () => this.scene.restart());
   }
 }
+
 new Phaser.Game({
   type: Phaser.AUTO, parent: "game", width: W, height: H, backgroundColor: "#2b1a12",
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  input: { activePointers: 2 }, render: { antialias: true },
-  scene: KioskScene,
+  input: { activePointers: 2 }, scene: Day,
 });

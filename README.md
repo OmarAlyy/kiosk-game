@@ -1,3 +1,5 @@
-# Kiosk game test build
-Test build of a children's money game prototype. Not a public release.
-Source commit: 5995445
+# Kiosk game test builds
+Prototype builds of a children's money game. Not a public release.
+- / : prototype A
+- /v1/ : first slice
+Source commit: 31ba4a7
