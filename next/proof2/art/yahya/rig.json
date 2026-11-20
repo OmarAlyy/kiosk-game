@@ -1,0 +1,218 @@
+{
+ "canvas": [
+  1792,
+  2400
+ ],
+ "parts": {
+  "torso": {
+   "file": "torso.png",
+   "x": 413,
+   "y": 974,
+   "w": 922,
+   "h": 1426,
+   "note": "body edit: head and arms removed, neck extended under the chin"
+  },
+  "head": {
+   "file": "head.png",
+   "x": 316,
+   "y": 115,
+   "w": 981,
+   "h": 1009,
+   "note": "blank-face edit, cut along the chin outline"
+  },
+  "armR_down": {
+   "file": "armR_down.png",
+   "x": 293,
+   "y": 1507,
+   "w": 304,
+   "h": 631,
+   "note": "his right arm (image left), from the master"
+  },
+  "armL_down": {
+   "file": "armL_down.png",
+   "x": 1183,
+   "y": 1510,
+   "w": 264,
+   "h": 588,
+   "note": "his left arm (image right), from the master"
+  },
+  "eyes_eager": {
+   "file": "eyes_eager.png",
+   "x": 728,
+   "y": 493,
+   "w": 464,
+   "h": 298,
+   "note": "master eyes and brows over the blank face"
+  },
+  "mouth_eager": {
+   "file": "mouth_eager.png",
+   "x": 831,
+   "y": 838,
+   "w": 262,
+   "h": 69,
+   "note": "master mouth over the blank face"
+  },
+  "eyes_blink": {
+   "file": "eyes_blink.png",
+   "x": 730,
+   "y": 493,
+   "w": 462,
+   "h": 269,
+   "note": "blink eyes and brows over the blank face"
+  },
+  "mouth_talk": {
+   "file": "mouth_talk.png",
+   "x": 815,
+   "y": 834,
+   "w": 304,
+   "h": 183,
+   "note": "talk mouth over the blank face"
+  },
+  "eyes_happy": {
+   "file": "eyes_happy.png",
+   "x": 729,
+   "y": 493,
+   "w": 463,
+   "h": 227,
+   "note": "happy eyes and brows over the blank face"
+  },
+  "mouth_happy": {
+   "file": "mouth_happy.png",
+   "x": 774,
+   "y": 810,
+   "w": 373,
+   "h": 195,
+   "note": "happy mouth over the blank face"
+  },
+  "eyes_surprised": {
+   "file": "eyes_surprised.png",
+   "x": 728,
+   "y": 487,
+   "w": 466,
+   "h": 326,
+   "note": "surprised eyes and brows over the blank face"
+  },
+  "mouth_surprised": {
+   "file": "mouth_surprised.png",
+   "x": 929,
+   "y": 878,
+   "w": 128,
+   "h": 95,
+   "note": "surprised mouth over the blank face"
+  },
+  "torso_noRsleeve": {
+   "file": "torso_noRsleeve.png",
+   "x": 556,
+   "y": 974,
+   "w": 779,
+   "h": 1426,
+   "note": "body piece without its right sleeve (used while the reach or grip pose shows its own sleeve)"
+  },
+  "armR_reach": {
+   "file": "armR_reach.png",
+   "x": 405,
+   "y": 1059,
+   "w": 570,
+   "h": 1052,
+   "note": "Rreach edit: right arm with its own sleeve (and cup)"
+  },
+  "armR_grip": {
+   "file": "armR_grip.png",
+   "x": 404,
+   "y": 1059,
+   "w": 720,
+   "h": 983,
+   "note": "Rgrip edit: right arm with its own sleeve (and cup)"
+  }
+ },
+ "sleeveRegion": [
+  [
+   790,
+   1060
+  ],
+  [
+   380,
+   1060
+  ],
+  [
+   360,
+   1640
+  ],
+  [
+   690,
+   1640
+  ],
+  [
+   730,
+   1460
+  ],
+  [
+   770,
+   1250
+  ]
+ ],
+ "cupProp": {
+  "scale2k": 0.7366071428571429,
+  "center2k": [
+   941.0491071428571,
+   1705.8705357142858
+  ],
+  "bottom2k": 2038.8169642857142,
+  "juiceTopPx": -131.0,
+  "juiceBottomPx": 407.0
+ },
+ "pivots": {
+  "counterLine": [
+   870,
+   2039
+  ],
+  "neck": [
+   876,
+   1078
+  ],
+  "shoulderR": [
+   520,
+   1300
+  ],
+  "elbowHangR": [
+   468,
+   1520
+  ],
+  "elbowHangL": [
+   1284,
+   1523
+  ]
+ },
+ "layers_back_to_front": [
+  "armL",
+  "armR(down)",
+  "torso",
+  "armR(reach|grip)",
+  "head",
+  "eyes_*",
+  "mouth_*"
+ ],
+ "expressions": {
+  "eager": [
+   "eyes_eager",
+   "mouth_eager"
+  ],
+  "talk": [
+   "eyes_eager",
+   "mouth_talk"
+  ],
+  "happy": [
+   "eyes_happy",
+   "mouth_happy"
+  ],
+  "oops": [
+   "eyes_surprised",
+   "mouth_surprised"
+  ],
+  "blink": [
+   "eyes_blink",
+   null
+  ]
+ },
+ "game_scale": 0.5
+}
