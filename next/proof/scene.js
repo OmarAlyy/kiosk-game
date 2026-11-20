@@ -140,11 +140,12 @@ class Scene extends Phaser.Scene {
   hush() { if (this.bub) { this.bub.destroy(); this.bub = null; } }
 
   walkIn() {
+    this.yImg.setFlipX(true);
     return new Promise(res => {
       const bob = this.tweens.add({ targets: this.yImg, y: -16, angle: { from: -2.2, to: 2.2 }, duration: 230, yoyo: true, repeat: -1, ease: "Sine.inOut" });
       const steps = this.time.addEvent({ delay: 300, repeat: 4, callback: () => this.sfx("step", { volume: 0.2, rate: 1.3 }) });
       this.tweens.add({ targets: this.yahya, x: Y.x, duration: 1500, ease: "Sine.out", onComplete: () => {
-        bob.stop(); steps.remove(); this.yImg.y = 0; this.yImg.angle = 0;
+        bob.stop(); steps.remove(); this.yImg.y = 0; this.yImg.angle = 0; this.yImg.setFlipX(false);
         // settle: a small squash and recover
         this.tweens.add({ targets: this.yImg, scaleY: Y.scale * 0.96, scaleX: Y.scale * 1.02, duration: 110, yoyo: true, onComplete: res });
       } });
@@ -195,8 +196,10 @@ class Scene extends Phaser.Scene {
   }
 
   // ---------- actions ----------
+  nope(target) { this.sfx("deny", { volume: 0.35 }); this.tweens.add({ targets: target, angle: { from: -6, to: 6 }, duration: 60, yoyo: true, repeat: 2, onComplete: () => { target.angle = 0; } }); }
   pour() {
-    if (this.phase !== "make" || this.cup.level > 0) return;
+    if (this.phase !== "make" || this.busy) return;
+    if (this.cup.level > 0) return this.nope(this.jug);
     this.busy = true;
     this.sfx("pour", { volume: 0.6 });
     this.tweens.chain({ targets: this.jug, tweens: [
@@ -216,7 +219,8 @@ class Scene extends Phaser.Scene {
     this.time.addEvent({ delay: 60, repeat: 15, callback: draw });
   }
   addIce() {
-    if (this.phase !== "make" || this.cup.level === 0 || this.cup.cubes >= 2) return;
+    if (this.phase !== "make" || this.busy) return;
+    if (this.cup.level === 0 || this.cup.cubes >= 2) return this.nope(this.iceBox);
     this.busy = true;
     this.tweens.add({ targets: this.iceLid, angle: -70, duration: 160, yoyo: true, hold: 520 });
     for (let i = 0; i < 2; i++) {
@@ -278,11 +282,11 @@ class Scene extends Phaser.Scene {
     this.checkTimer = this.time.delayedCall(1900, () => this.checkChange());   // give a slow child time to add the next coin
   }
   async checkChange() {
-    if (this.given < DUE) { this.shake(); this.sfx("deny", { volume: 0.4 }); await this.say(`لسه ناقص ${ar(DUE - this.given)}!`, 1100, 0.9); this.hush(); return; }
+    if (this.given < DUE) { this.shake(); this.sfx("deny", { volume: 0.4 }); await this.say(DUE - this.given === 1 ? "لسه ناقص جنيه!" : "لسه ناقص جنيهين!", 1100, 0.9); this.hush(); return; }
     this.phase = "done"; this.guide(null);
     if (this.given > DUE) {
       const extra = this.given - DUE;
-      await this.say(`ده كتير! رجّعت ${ar(extra)} 😄`, 1300);
+      await this.say(extra === 1 ? "ده كتير! خد جنيه 😄" : "ده كتير! خد الزيادة 😄", 1300);
       for (let i = 0; i < extra; i++) { const c = this.dishCoins.pop(); this.tweens.add({ targets: c, x: 560, y: 1100, duration: 300 }); this.money++; }
       this.refresh();
     }
@@ -298,11 +302,6 @@ class Scene extends Phaser.Scene {
     this.burst(this.yahya.x, 430, "star", 10); this.burst(this.yahya.x - 60, 520, "heart", 6);
     this.sfx("sparkle", { volume: 0.55 });
     await this.say("شكرًا! أحلى عصير في شارع الفكرة!", 1700);
-    // the profit goes into the piggy bank, coin by coin
-    for (let i = 0; i < PRICE; i++) this.time.delayedCall(i * 170, () => {
-      const c = this.add.image(560, 1100, "coin").setScale(0.7).setDepth(12);
-      this.tweens.add({ targets: c, x: 470, y: TOP - 78, duration: 420, ease: "Quad.out", onComplete: () => { c.destroy(); this.sfx("coin", { volume: 0.4, rate: 1.1 + i * 0.08 }); this.tweens.add({ targets: this.piggy, scaleY: 0.66, duration: 70, yoyo: true }); } });
-    });
     await new Promise(r => this.time.delayedCall(900, r));
     await this.walkOut();
     this.endCard();
@@ -317,7 +316,7 @@ class Scene extends Phaser.Scene {
     if (this.phase !== "make") return;
     if (this.cup.level === 0) this.guide({ x: this.jug.x, y: this.jug.y });
     else if (this.cup.cubes < 2) this.guide({ x: 612, y: TOP - 40 });
-    else this.guide({ x: this.cup.x, y: this.cup.y }, 80);
+    else this.guide({ x: this.yahya.x, y: 640 }, 130);
   }
   startScreen() {
     const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x2b1a12, 0.55).setDepth(30);
@@ -357,7 +356,7 @@ class Scene extends Phaser.Scene {
     const s = this, toPage = (x, y) => { const r = s.game.canvas.getBoundingClientRect(); return { x: r.left + x * r.width / W, y: r.top + y * r.height / H }; };
     return {
       phase: () => s.phase, busy: () => !!s.busy, money: () => s.money, given: () => s.given,
-      cupState: () => ({ level: s.cup.level, cubes: s.cup.cubes }),
+      cupState: () => ({ level: s.cup.level, cubes: s.cup.cubes }), stock: () => ({ cups: s.cupsLeft, ice: s.ice }),
       start: () => toPage(W / 2, H / 2), jug: () => toPage(s.jug.x, s.jug.y), ice: () => toPage(612, TOP - 40),
       cup: () => toPage(s.cup.x, s.cup.y), yahya: () => toPage(s.yahya.x, 640), dish: () => toPage(250, 1110),
       drawerCoins: () => s.drawerCoins.map(c => toPage(c.x, c.y)), again: () => s.endBtn && toPage(W / 2, 560),
